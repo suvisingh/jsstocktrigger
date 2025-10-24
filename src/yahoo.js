@@ -51,4 +51,46 @@ async function getIndexHistoryJSON(ticker) {
     return JSON.stringify(obj);
 }
 
-module.exports = { getIndexHistory, getIndexHistoryJSON };
+/*
+ New: compute mean of closes, difference between today's close and mean,
+ percentage change from the mean, and return those values.
+ Returns: { mean, todayClose, difference, percentChange }
+*/
+function meanOf(array) {
+    const vals = array.filter(v => typeof v === 'number' && !Number.isNaN(v));
+    if (vals.length === 0) return null;
+    const sum = vals.reduce((s, v) => s + v, 0);
+    return sum / vals.length;
+}
+
+async function getIndexStats(ticker) {
+    if (!ticker) throw new Error('ticker is required');
+    const fetch = await getFetch();
+    const url = `https://query1.finance.yahoo.com/v7/finance/chart/${encodeURIComponent(ticker)}?range=5d&interval=1d`;
+    const res = await fetch(url, { headers: { 'User-Agent': 'jsstocktrigger' } });
+    if (!res.ok) throw new Error(`Yahoo Finance request failed: ${res.status} ${res.statusText}`);
+    const payload = await res.json();
+    const result = payload?.chart?.result?.[0];
+    if (!result) throw new Error('No chart result from Yahoo Finance');
+
+    const quote = result.indicators?.quote?.[0] || {};
+    const closes = quote.close || [];
+
+    const mean = meanOf(closes);
+    if (mean === null) throw new Error('No valid close values to compute mean');
+
+    // find the most recent valid close (today's close)
+    let todayClose = null;
+    for (let i = closes.length - 1; i >= 0; i--) {
+        const v = closes[i];
+        if (typeof v === 'number' && !Number.isNaN(v)) { todayClose = v; break; }
+    }
+    if (todayClose === null) throw new Error('No valid today close value found');
+
+    const difference = todayClose - mean;
+    const percentChange = mean === 0 ? null : (difference / mean) * 100;
+
+    return { mean, todayClose, difference, percentChange };
+}
+
+module.exports = { getIndexHistory, getIndexHistoryJSON, getIndexStats };
