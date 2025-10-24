@@ -1,6 +1,6 @@
 /*
  Simple helper to fetch last 5 days of index history from Yahoo Finance.
- Returns an array of { date, open, high, low, close, volume, adjclose }.
+ Returns an object keyed by date: { "2025-10-20": { open, high, low, close, volume, adjclose }, ... }.
  Works on Node 18+ (global fetch). For older Node, install node-fetch:
    npm install node-fetch
 */
@@ -28,15 +28,27 @@ async function getIndexHistory(ticker) {
     const quote = result.indicators?.quote?.[0] || {};
     const adj = result.indicators?.adjclose?.[0]?.adjclose || [];
 
-    return timestamps.map((t, i) => ({
-        date: new Date(t * 1000).toISOString().slice(0, 10),
-        open: quote.open?.[i] ?? null,
-        high: quote.high?.[i] ?? null,
-        low: quote.low?.[i] ?? null,
-        close: quote.close?.[i] ?? null,
-        volume: quote.volume?.[i] ?? null,
-        adjclose: adj[i] ?? null
-    }));
+    // build an object keyed by ISO date string
+    const map = {};
+    timestamps.forEach((t, i) => {
+        const date = new Date(t * 1000).toISOString().slice(0, 10);
+        map[date] = {
+            open: quote.open?.[i] ?? null,
+            high: quote.high?.[i] ?? null,
+            low: quote.low?.[i] ?? null,
+            close: quote.close?.[i] ?? null,
+            volume: quote.volume?.[i] ?? null,
+            adjclose: adj[i] ?? null
+        };
+    });
+
+    return map;
 }
 
-module.exports = { getIndexHistory };
+// convenience: return JSON string of the map
+async function getIndexHistoryJSON(ticker) {
+    const obj = await getIndexHistory(ticker);
+    return JSON.stringify(obj);
+}
+
+module.exports = { getIndexHistory, getIndexHistoryJSON };
